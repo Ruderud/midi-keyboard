@@ -55,7 +55,7 @@ function App() {
           console.log("event", event)
           // 건반 정보 추출
           const cmd = event.data[0] >> 4
-          const channel = event.data[0] & 0xf
+          // const channel = event.data[0] & 0xf
           const note = event.data[1]
           const velocity = event.data[2]
 

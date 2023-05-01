@@ -1,6 +1,6 @@
 import { Box, SxProps } from "@mui/material"
 
-const MAX_KEYBOARD_KEY_COUNT = 108 + 1
+// const MAX_KEYBOARD_KEY_COUNT = 108 + 1
 type KeyColor = "white" | "black"
 
 type KeyBoardProps = {
@@ -8,11 +8,6 @@ type KeyBoardProps = {
 }
 
 export const KeyBoard = ({ note }: KeyBoardProps) => {
-  const isBlackKey = (index: number): boolean => {
-    const blackKeyIndex = [1, 3, 6, 8, 10]
-    if (blackKeyIndex.includes(index)) return true
-    return false
-  }
   return (
     <>
       <Box sx={{ display: "flex", maxWidth: "1280px", overflow: "scroll" }}>
