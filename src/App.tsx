@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react"
 import { KeyBoard } from "./components/KeyBoard"
 import { Box, Button, Container, Typography } from "@mui/material"
+import axios from "axios"
+// import { MidiEvent } from 'midi-parser-js';
+import parseMidiFile from "midi-file-parser"
 
 function App() {
   const [note, setNote] = useState<number | null>(null) // 현재 눌린 건반 정보
@@ -35,6 +38,45 @@ function App() {
     connectDevice()
   }
 
+  async function checkMidiAccess({ audioCtx, gainNode }: { audioCtx: AudioContext; gainNode: GainNode }) {
+    try {
+      const midiAccess = await navigator.requestMIDIAccess()
+      const inputs = midiAccess.inputs.values()
+
+      for (const input of inputs) {
+        setDeviceInfo(input)
+
+        input.onmidimessage = (event: any) => {
+          console.log("event", event)
+          const cmd = event.data[0] >> 4
+          const note = event.data[1]
+          const velocity = event.data[2]
+
+          if (cmd === 9 && velocity > 0) {
+            setNote(note)
+
+            const noteFrequency = 440 * Math.pow(2, (note - 69) / 12)
+
+            const oscillator = audioCtx.createOscillator()
+            oscillator.type = "square"
+            oscillator.frequency.value = noteFrequency
+            oscillator.connect(gainNode)
+
+            oscillator.start()
+            oscillator.stop(audioCtx.currentTime + 0.1)
+          }
+        }
+
+        input.onstatechange = () => {
+          console.log("input.onstatechange")
+          if (!input.connection) return disconnectDevice()
+        }
+      }
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
   useEffect(() => {
     console.log("audioCtx", audioCtx)
     if (!audioCtx) return
@@ -42,47 +84,45 @@ function App() {
     gainNode.gain.value = 0.2
     gainNode.connect(audioCtx.destination)
 
-    // MIDI 연결 확인
-    navigator.requestMIDIAccess().then((midiAccess) => {
-      // MIDI 입력장치 찾기
-      const inputs = midiAccess.inputs.values()
-      for (const input of inputs) {
-        // MIDI 입력장치로부터 데이터 수신
-        for (let input = inputs.next(); input && !input.done; input = inputs.next()) {
-          setDeviceInfo(input.value)
-        }
-        input.onmidimessage = (event: any) => {
-          console.log("event", event)
-          // 건반 정보 추출
-          const cmd = event.data[0] >> 4
-          // const channel = event.data[0] & 0xf
-          const note = event.data[1]
-          const velocity = event.data[2]
+    const audioConfig = {
+      audioCtx,
+      gainNode,
+    }
 
-          // 건반이 눌렸을 때
-          if (cmd === 9 && velocity > 0) {
-            setNote(note)
-
-            const noteFrequency = 440 * Math.pow(2, (note - 69) / 12)
-
-            // 사각파 오실레이터 생성
-            const oscillator = audioCtx.createOscillator()
-            oscillator.type = "square"
-            oscillator.frequency.value = noteFrequency
-            oscillator.connect(gainNode)
-
-            // 사각파 오실레이터 시작 및 정지
-            oscillator.start()
-            oscillator.stop(audioCtx.currentTime + 0.1)
-          }
-        }
-        input.onstatechange = () => {
-          console.log("input.onstatechange")
-          if (!input.connection) return disconnectDevice()
-        }
-      }
-    })
+    checkMidiAccess(audioConfig)
   }, [audioCtx])
+
+  useEffect(() => {
+    fetch(`${import.meta.env.BASE_URL}MSX-05-01-cosmic_couquest.mid`)
+      .then((response) => response.arrayBuffer())
+      .then((arrayBuffer) => {
+        console.log("arrayBuffer", arrayBuffer)
+        navigator.requestMIDIAccess().then((midiAccess) => {
+          const options = { currentTime: 0 }
+          midiAccess.inputs.forEach((input: any) => {
+            console.log("midi", input)
+            input.send(arrayBuffer, 0, options)
+          })
+        })
+      })
+  }, [])
+
+  const playMidi = async () => {
+    const { data: midiData } = await axios.get<ArrayBuffer>(
+      `${import.meta.env.BASE_URL}MSX-05-01-cosmic_couquest.mid`,
+      {
+        responseType: "arraybuffer",
+      }
+    )
+
+    const audioContext = new AudioContext()
+    const audioBuffer = await audioContext.decodeAudioData(midiData)
+
+    const source = audioContext.createBufferSource()
+    source.buffer = audioBuffer
+    source.connect(audioContext.destination)
+    source.start()
+  }
 
   return (
     <Container>
@@ -99,6 +139,14 @@ function App() {
 
       <br />
       <KeyBoard note={note} />
+
+      <button
+        onClick={() => {
+          playMidi()
+        }}
+      >
+        play audio by midi file
+      </button>
     </Container>
   )
 }
